@@ -1,5 +1,4 @@
-[providers]
-python = "latest"
+providers = ["python"]
 
 [phases.install]
 cmds = ["pip install --upgrade pip", "pip install -r requirements.txt"]
