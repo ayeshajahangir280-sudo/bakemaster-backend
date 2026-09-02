@@ -1,0 +1,2 @@
+from django.urls import include, path
+urlpatterns=[path("",include("apps.locations.urls")),path("",include("apps.master_data.urls")),path("",include("apps.inventory.urls")),path("",include("apps.purchasing.urls")),path("",include("apps.recipes.urls")),path("",include("apps.production.urls")),path("",include("apps.transfers.urls")),path("",include("apps.sales.urls")),path("",include("apps.payments.urls")),path("",include("apps.audit.urls")),path("",include("apps.reports.urls")),path("",include("apps.system_state.urls"))]
