@@ -58,7 +58,8 @@ class Command(BaseCommand):
                 recipe, _ = Recipe.objects.update_or_create(recipe_number=f"W-REC-{code}", defaults={"finished_product": products[code], "standard_output_quantity": 100, "output_unit": units["COOKIE"], "version": "1.0", "effective_date": timezone.localdate(), "status": "ACTIVE", "is_default": True, "notes": "WebMCP challenge demo recipe"})
                 RecipeItem.objects.filter(recipe=recipe).delete()
                 for material, quantity, wastage in lines:
-                    RecipeItem.objects.create(recipe=recipe, raw_material=materials[material], required_quantity=quantity, unit=units[material if material == "VANILLA" else "KG" if material != "BOX" else "PCS"], wastage_percentage=wastage, unit_cost_snapshot=materials[material].current_average_cost)
+                    unit_code = "L" if material == "VANILLA" else "PCS" if material == "BOX" else "KG"
+                    RecipeItem.objects.create(recipe=recipe, raw_material=materials[material], required_quantity=quantity, unit=units[unit_code], wastage_percentage=wastage, unit_cost_snapshot=materials[material].current_average_cost)
 
             stock = {"FLOUR": 60, "SUGAR": 30, "BUTTER": 25, "CHOC": 10, "COCOA": 10, "VANILLA": 5, "BAKING": 5, "SALT": 5, "ALMONDS": 20, "BOX": 500}
             for code, quantity in stock.items():
