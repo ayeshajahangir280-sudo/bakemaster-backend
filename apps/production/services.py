@@ -10,6 +10,32 @@ from apps.inventory.posting import post_movement
 from .models import ProductionBatch, ProductionConsumption, ProductionOutput
 
 
+def calculate_production_requirements(recipe, requested_quantity, production_location):
+    """Return the authoritative, read-only material requirements for production."""
+    requested = Decimal(str(requested_quantity))
+    scale = requested / recipe.standard_output_quantity
+    requirements = []
+    for line in recipe.items.select_related("raw_material", "unit", "raw_material__base_unit", "raw_material__consumption_unit"):
+        base_required = line.required_quantity * scale
+        required = base_required * (Decimal("1") + line.wastage_percentage / Decimal("100"))
+        available = get_available_stock(line.raw_material, production_location)
+        shortage = max(required - available, Decimal("0"))
+        requirements.append({
+            "raw_material_id": str(line.raw_material_id),
+            "raw_material_code": line.raw_material.material_code,
+            "raw_material_name": line.raw_material.name,
+            "unit_id": str(line.unit_id),
+            "unit_name": line.unit.name,
+            "base_required_quantity": base_required,
+            "wastage_percentage": line.wastage_percentage,
+            "required_quantity": required,
+            "available_quantity": available,
+            "shortage_quantity": shortage,
+            "sufficient": shortage <= 0,
+        })
+    return requirements
+
+
 @transaction.atomic
 def complete_production(pk, user, actual_quantity=None):
     production = ProductionBatch.objects.select_for_update().select_related(
@@ -21,22 +47,23 @@ def complete_production(pk, user, actual_quantity=None):
     if output <= 0:
         raise ValidationError("Actual produced quantity must be positive.")
     recipe = production.recipe
-    scale = production.planned_quantity / recipe.standard_output_quantity
-    requirements = []
-    for line in recipe.items.select_related("raw_material", "unit"):
-        required = line.required_quantity * scale * (Decimal("1") + line.wastage_percentage / Decimal("100"))
+    requirements = calculate_production_requirements(recipe, production.planned_quantity, production.production_location)
+    recipe_lines = list(recipe.items.select_related("raw_material", "unit"))
+    calculated = []
+    for line, item in zip(recipe_lines, requirements):
+        required = item["required_quantity"]
         StockTransaction.objects.select_for_update().filter(
             raw_material=line.raw_material,
             destination_location=production.production_location,
         )
-        available = get_available_stock(line.raw_material, production.production_location)
+        available = item["available_quantity"]
         if required > available:
             raise ValidationError(f"Insufficient {line.raw_material.name}. Available: {available}; required: {required}.")
-        requirements.append((line, required, get_average_cost(line.raw_material, production.production_location)))
+        calculated.append((line, required, get_average_cost(line.raw_material, production.production_location)))
 
     material_cost = Decimal("0")
     now = timezone.now()
-    for line, required, unit_cost in requirements:
+    for line, required, unit_cost in calculated:
         value = required * unit_cost
         material_cost += value
         consumption = ProductionConsumption.objects.create(
